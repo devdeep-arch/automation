@@ -78,66 +78,67 @@ const dbUpdate = (p, d) => db.ref(p).update(d);
 const dbGet = async (p) => (await db.ref(p).once("value")).val();
 
 // ---------------- WHATSAPP SEND ----------------
-async function sendWhatsAppTemplate(phone, templateName, data) {
+// ---------------- UNIVERSAL WHATSAPP TEMPLATE SENDER ----------------
+/**
+ * Send WhatsApp template dynamically for any template
+ * @param {string} phone - Recipient phone number
+ * @param {string} templateName - WhatsApp template name
+ * @param {Array} bodyParams - Array of strings for body parameters (any length)
+ * @param {Array} buttonsPayload - Array of button payloads (optional)
+ */
+async function sendWhatsAppTemplate(phone, templateName, bodyParams = [], buttonsPayload = []) {
+  if (!phone || !templateName) {
+    console.error("❌ Phone or template name missing");
+    return;
+  }
+
+  // Components array
   const components = [];
 
-  // BODY PARAMETERS
-  if (data.body && data.body.length) {
+  if (bodyParams.length > 0) {
     components.push({
       type: "body",
-      parameters: data.body.map((text) => ({
-        type: "text",
-        text: String(text || "N/A"),
-      })),
+      parameters: bodyParams.map((p) => ({ type: "text", text: p })),
     });
   }
 
-  // BUTTONS
-  if (data.buttons && data.buttons.length) {
-    data.buttons.forEach((payload, index) => {
+  if (buttonsPayload.length > 0) {
+    buttonsPayload.forEach((payload, index) => {
       components.push({
         type: "button",
         sub_type: "quick_reply",
-        index: String(index),
-        parameters: [
-          {
-            type: "payload",
-            payload,
-          },
-        ],
+        index: index.toString(),
+        parameters: [{ type: "payload", payload }],
       });
     });
   }
 
   try {
-    await axios.post(
-      `https://graph.facebook.com/v20.0/${WHATSAPP_NUMBER_ID}/messages`,
+    const res = await axios.post(
+      `https://graph.facebook.com/v20.0/${WHATSAPP_PHONE_ID}/messages`,
       {
         messaging_product: "whatsapp",
         to: phone,
         type: "template",
         template: {
           name: templateName,
-          language: { code: "en_US" }, // 🔴 IMPORTANT
+          language: { code: "en" },
           components,
         },
       },
       {
         headers: {
-          Authorization: `Bearer ${WHATSAPP_TOKEN}`,
+          Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
           "Content-Type": "application/json",
         },
       }
     );
+
+    console.log("✅ WhatsApp template sent:", res.data);
   } catch (err) {
-    console.error(
-      "❌ WhatsApp API Error:",
-      err.response?.data || err.message
-    );
-    throw err;
+    console.error("🔥 WhatsApp send error:", err.response?.data || err.message);
   }
 }
-
 // ---------------- SHOPIFY HELPERS ----------------
 async function updateShopifyOrderNote(orderId, note) {
   const url = `https://${SHOPIFY_SHOP}/admin/api/2024-01/orders/${orderId}.json`;
@@ -178,60 +179,81 @@ app.get("/webhook/whatsapp", (req, res) => {
 // Meta needs JSON, Shopify needs RAW → separate
 app.post("/webhook/whatsapp", express.json(), async (req, res) => {
   res.sendStatus(200);
+
   const msg = req.body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
   if (!msg) return;
 
   const phone = normalizePhone(msg.from);
-
-  if (msg.type === "button") {
-    const [action, orderId] = msg.button.payload.split(":");
-    const order = await dbGet(`orders/${orderId}`);
-    if (!order) return;
-
-    if (["confirmed", "cancelled"].includes(order.status)) {
-      await sendWhatsAppTemplate(phone, TPL.CALL_US, { body: [order.status.toUpperCase()] });
-      return;
-    }
-
-    if (action === PAYLOADS.CONFIRM_ORDER) {
-      await updateShopifyOrderNote(orderId, "Confirmed via WhatsApp");
-      await sendWhatsAppTemplate(phone, TPL.ORDER_CONFIRMED_REPLY, { body: [order.customerName, order.order_name] });
-      await dbUpdate(`orders/${orderId}`, { status: "confirmed" });
-    }
-
-    if (action === PAYLOADS.CANCEL_ORDER) {
-      await updateShopifyOrderNote(orderId, "Cancelled via WhatsApp");
-      await sendWhatsAppTemplate(phone, TPL.ORDER_CANCELLED_REPLY_AUTO, { body: [order.order_name] });
-      await dbUpdate(`orders/${orderId}`, { status: "cancelled" });
-    }
-  }
-});
-
-// ---------------- SHOPIFY ORDER CREATE ----------------
-app.post("/webhook/shopify/order", express.raw({ type: "application/json" }), async (req, res) => {
-  res.sendStatus(200);
-  if (!verifyShopify(req, req.body)) return;
-
-  const order = JSON.parse(req.body.toString());
-  const phone = normalizePhone(order.shipping_address?.phone || order.customer?.phone);
   if (!phone) return;
 
-  const payloadConfirm = `${PAYLOADS.CONFIRM_ORDER}:${order.id}`;
-  const payloadCancel = `${PAYLOADS.CANCEL_ORDER}:${order.id}`;
+  const [action, orderId] = msg.button?.payload?.split(":") || [];
+  const order = await dbGet(`orders/${orderId}`);
+  if (!order) return;
 
-  await dbSet(`orders/${order.id}`, {
-    order_name: order.name,
-    customerName: order.customer?.first_name || "Customer",
-    phone,
-    status: "pending",
-    createdAt: Date.now(),
-  });
+  let templateName = "";
+  let bodyParams = [];
 
-  await sendWhatsAppTemplate(phone, TPL.ORDER_CONFIRMATION, {
-    body: [order.customer?.first_name || "Customer", order.name, order.total_price, order.currency],
-    buttons: [payloadConfirm, payloadCancel],
+  // Confirm button → 2 params
+  if (action === PAYLOADS.CONFIRM_ORDER) {
+    templateName = "order_confirmed_reply";
+    bodyParams = [
+      order.customerName, // {{1}}
+      order.order_name,   // {{2}}
+    ];
+  }
+  // Cancel button → 1 param
+  else if (action === PAYLOADS.CANCEL_ORDER) {
+    templateName = "order_cancelled_reply_auto";
+    bodyParams = [
+      order.order_name,   // {{1}}
+    ];
+  }
+
+  await sendWhatsAppTemplate(phone, templateName, bodyParams, []); // No buttons in reply
+  await dbUpdate(`orders/${orderId}`, {
+    status: action === PAYLOADS.CONFIRM_ORDER ? "confirmed" : "cancelled",
   });
 });
+// ---------------- SHOPIFY ORDER CREATE ----------------
+app.post(
+  "/webhook/shopify/order",
+  express.raw({ type: "application/json" }),
+  async (req, res) => {
+    res.sendStatus(200);
+    if (!verifyShopify(req, req.body)) return;
+
+    const order = JSON.parse(req.body.toString());
+    const phone = normalizePhone(order.shipping_address?.phone || order.customer?.phone);
+    if (!phone) return;
+
+    const payloadConfirm = `${PAYLOADS.CONFIRM_ORDER}:${order.id}`;
+    const payloadCancel = `${PAYLOADS.CANCEL_ORDER}:${order.id}`;
+
+    await dbSet(`orders/${order.id}`, {
+      order_name: order.name,
+      customerName: order.customer?.first_name || "Customer",
+      phone,
+      status: "pending",
+      createdAt: Date.now(),
+    });
+
+    // Example for Shopify order template
+    await sendWhatsAppTemplate(
+      phone,
+      "order_confirmation",
+      [
+        order.customer?.first_name || "Customer",
+        order.name,
+        order.line_items?.[0]?.name || "Product",
+        order.line_items?.[0]?.quantity?.toString() || "1",
+        order.shop_name || "My Store",
+        order.total_price?.toString() || "0.00",
+        order.currency || "USD",
+      ],
+      [payloadConfirm, payloadCancel]
+    );
+  }
+);
 
 // ---------------- FULFILLMENT ----------------
 app.post("/webhook/shopify/fulfillment", express.json(), async (req, res) => {
@@ -242,7 +264,7 @@ app.post("/webhook/shopify/fulfillment", express.json(), async (req, res) => {
   if (!order) return;
 
   if (f.shipment_status === "delivered") {
-    await sendWhatsAppTemplate(order.phone, TPL.ORDER_DELIVERED, { body: [order.order_name] });
+    await sendWhatsAppTemplate(order.phone, TPL.ORDER_DELIVERED, [order.order_name] );
     await dbUpdate(`orders/${orderId}`, { status: "delivered" });
   }
 });
@@ -251,6 +273,7 @@ app.post("/webhook/shopify/fulfillment", express.json(), async (req, res) => {
 app.get("/health", (_, r) => r.json({ ok: true }));
 
 app.listen(PORT, () => console.log(`🚀 Server running on ${PORT}`));
+
 
 
 
