@@ -78,17 +78,64 @@ const dbUpdate = (p, d) => db.ref(p).update(d);
 const dbGet = async (p) => (await db.ref(p).once("value")).val();
 
 // ---------------- WHATSAPP SEND ----------------
-async function sendWhatsAppTemplate(phone, name, { body = [], buttons = [] } = {}) {
+async function sendWhatsAppTemplate(phone, templateName, data) {
   const components = [];
-  if (body.length) components.push({ type: "body", parameters: body.map(t => ({ type: "text", text: String(t) })) });
-  buttons.forEach((b, i) => components.push({ type: "button", sub_type: "quick_reply", index: String(i), parameters: [{ type: "payload", payload: b }] }));
 
-  await axios.post(`https://graph.facebook.com/v20.0/${WHATSAPP_NUMBER_ID}/messages`, {
-    messaging_product: "whatsapp",
-    to: phone,
-    type: "template",
-    template: { name, language: { code: "en" }, components }
-  }, { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}` } });
+  // BODY PARAMETERS
+  if (data.body && data.body.length) {
+    components.push({
+      type: "body",
+      parameters: data.body.map((text) => ({
+        type: "text",
+        text: String(text || "N/A"),
+      })),
+    });
+  }
+
+  // BUTTONS
+  if (data.buttons && data.buttons.length) {
+    data.buttons.forEach((payload, index) => {
+      components.push({
+        type: "button",
+        sub_type: "quick_reply",
+        index: String(index),
+        parameters: [
+          {
+            type: "payload",
+            payload,
+          },
+        ],
+      });
+    });
+  }
+
+  try {
+    await axios.post(
+      `https://graph.facebook.com/v20.0/${WHATSAPP_NUMBER_ID}/messages`,
+      {
+        messaging_product: "whatsapp",
+        to: phone,
+        type: "template",
+        template: {
+          name: templateName,
+          language: { code: "en_US" }, // 🔴 IMPORTANT
+          components,
+        },
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${WHATSAPP_TOKEN}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+  } catch (err) {
+    console.error(
+      "❌ WhatsApp API Error:",
+      err.response?.data || err.message
+    );
+    throw err;
+  }
 }
 
 // ---------------- SHOPIFY HELPERS ----------------
@@ -204,6 +251,7 @@ app.post("/webhook/shopify/fulfillment", express.json(), async (req, res) => {
 app.get("/health", (_, r) => r.json({ ok: true }));
 
 app.listen(PORT, () => console.log(`🚀 Server running on ${PORT}`));
+
 
 
 
