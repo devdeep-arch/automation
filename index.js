@@ -9,8 +9,6 @@
 // ✔ Order confirmation flow NOT broken
 // ----------------------------------------------------
 
-process.on("uncaughtException", (err) => console.error("🔥 Uncaught Exception:", err));
-process.on("unhandledRejection", (r) => console.error("🔥 Unhandled Rejection:", r));
 
 import express from "express";
 import crypto from "crypto";
@@ -273,6 +271,7 @@ app.post("/webhook/shopify/fulfillment", express.json(), async (req, res) => {
 app.get("/health", (_, r) => r.json({ ok: true }));
 
 app.listen(PORT, () => console.log(`🚀 Server running on ${PORT}`));
+
 
 
 
