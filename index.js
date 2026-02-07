@@ -113,8 +113,23 @@ function verifyShopify(req, buf) {
 // ---------------- EXPRESS ----------------
 const app = express();
 
+// ---------------- META WEBHOOK VERIFY ----------------
+app.get("/webhook/whatsapp", (req, res) => {
+  const mode = req.query["hub.mode"];
+  const token = req.query["hub.verify_token"];
+  const challenge = req.query["hub.challenge"];
+
+  if (mode === "subscribe" && token === VERIFY_TOKEN_META) {
+    console.log("✅ Meta webhook verified");
+    return res.status(200).send(challenge);
+  }
+
+  console.log("❌ Meta webhook verification failed");
+  return res.sendStatus(403);
+});
+
 // Meta needs JSON, Shopify needs RAW → separate
-app.post("/webhook/whatsapo", express.json(), async (req, res) => {
+app.post("/webhook/whatsapp", express.json(), async (req, res) => {
   res.sendStatus(200);
   const msg = req.body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
   if (!msg) return;
@@ -189,4 +204,5 @@ app.post("/webhook/shopify/fulfillment", express.json(), async (req, res) => {
 app.get("/health", (_, r) => r.json({ ok: true }));
 
 app.listen(PORT, () => console.log(`🚀 Server running on ${PORT}`));
+
 
