@@ -116,7 +116,7 @@ async function sendWhatsAppTemplate(phone, templateName, bodyParams = [], button
 
   try {
     const res = await axios.post(
-      `https://graph.facebook.com/v20.0/${WHATSAPP_PHONE_ID}/messages`,
+      `https://graph.facebook.com/v20.0/${WHATSAPP_NUMBER_ID}/messages`,
       {
         messaging_product: "whatsapp",
         to: phone,
@@ -274,6 +274,7 @@ app.post("/webhook/shopify/fulfillment", express.json(), async (req, res) => {
 app.get("/health", (_, r) => r.json({ ok: true }));
 
 app.listen(PORT, () => console.log(`🚀 Server running on ${PORT}`));
+
 
 
 
