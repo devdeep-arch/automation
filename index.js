@@ -270,7 +270,6 @@ app.post("/webhook/shopify/fulfillment", express.json(), async (req, res) => {
   if (!order) return;
 
   // ✅ When order is SHIPPED
-  if (fulfillment.shipment_status === "shipped") {
 
     await sendWhatsAppTemplate(
       order.phone,
@@ -285,12 +284,12 @@ app.post("/webhook/shopify/fulfillment", express.json(), async (req, res) => {
       status: "shipped",
       shippedAt: Date.now()
     });
-  }
 });
 // ---------------- HEALTH ----------------
 app.get("/health", (_, r) => r.json({ ok: true }));
 
 app.listen(PORT, () => console.log(`🚀 Server running on ${PORT}`));
+
 
 
 
