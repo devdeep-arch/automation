@@ -257,23 +257,41 @@ app.post(
 );
 
 // ---------------- FULFILLMENT ----------------
+// ---------------- SHOPIFY FULFILLMENT (SHIPPED) ----------------
 app.post("/webhook/shopify/fulfillment", express.json(), async (req, res) => {
   res.sendStatus(200);
-  const f = req.body;
-  const orderId = String(f.order_id);
+
+  const fulfillment = req.body;
+  const orderId = String(fulfillment.order_id);
+
+  if (!orderId) return;
+
   const order = await dbGet(`orders/${orderId}`);
   if (!order) return;
 
-  if (f.shipment_status === "delivered") {
-    await sendWhatsAppTemplate(order.phone, TPL.ORDER_DELIVERED, [order.order_name] );
-    await dbUpdate(`orders/${orderId}`, { status: "delivered" });
+  // ✅ When order is SHIPPED
+  if (fulfillment.shipment_status === "shipped") {
+
+    await sendWhatsAppTemplate(
+      order.phone,
+      TPL.YOUR_ORDER_IS_SHIPPED,   // your_order_is_shipped_2025
+      [
+        order.order_name           // {{1}} → Order ID
+      ]
+      // ❌ no buttons
+    );
+
+    await dbUpdate(`orders/${orderId}`, {
+      status: "shipped",
+      shippedAt: Date.now()
+    });
   }
 });
-
 // ---------------- HEALTH ----------------
 app.get("/health", (_, r) => r.json({ ok: true }));
 
 app.listen(PORT, () => console.log(`🚀 Server running on ${PORT}`));
+
 
 
 
