@@ -48,6 +48,12 @@ admin.initializeApp({
 
 const db = admin.database();
 
+const STORE_ID = process.env.STORE_ID;
+if (!STORE_ID) {
+  console.error("❌ STORE_ID missing");
+  process.exit(1);
+}
+
 // ---------------- CONSTANTS (EARLY) ----------------
 export const TPL = {
   ORDER_CONFIRMATION: "order_confirmation",
@@ -77,6 +83,7 @@ const normalizePhone = (raw, cc = DEFAULT_COUNTRY_CODE) => {
 const dbSet = (p, d) => db.ref(p).set(d);
 const dbUpdate = (p, d) => db.ref(p).update(d);
 const dbGet = async (p) => (await db.ref(p).once("value")).val();
+const storeRef = (path = "") => `stores/${STORE_ID}/${path}`;
 
 // ---------------- WHATSAPP SEND ----------------
 // ---------------- UNIVERSAL WHATSAPP TEMPLATE SENDER ----------------
@@ -188,7 +195,7 @@ app.post("/webhook/whatsapp", express.json(), async (req, res) => {
   if (!phone) return;
 
   const [action, orderId] = msg.button?.payload?.split(":") || [];
-  const order = await dbGet(`orders/${orderId}`);
+  const order = await dbGet(storeRef(`orders/${orderId}`));
   if (!order) return;
 
   let templateName = "";
@@ -211,8 +218,15 @@ app.post("/webhook/whatsapp", express.json(), async (req, res) => {
   }
 
   await sendWhatsAppTemplate(phone, templateName, bodyParams, []); // No buttons in reply
-  await dbUpdate(`orders/${orderId}`, {
+  await dbUpdate(storeRef(`orders/${orderId}`), {
     status: action === PAYLOADS.CONFIRM_ORDER ? "confirmed" : "cancelled",
+    "timeline.lastCustomerReplyAt": Date.now(),
+    ...(action === PAYLOADS.CONFIRM_ORDER && {
+      "timeline.confirmedAt": Date.now()
+    }),
+    ...(action === PAYLOADS.CANCEL_ORDER && {
+      "timeline.cancelledAt": Date.now()
+    })
   });
 });
 // ---------------- SHOPIFY ORDER CREATE ----------------
@@ -230,14 +244,39 @@ app.post(
     const payloadConfirm = `${PAYLOADS.CONFIRM_ORDER}:${order.id}`;
     const payloadCancel = `${PAYLOADS.CANCEL_ORDER}:${order.id}`;
 
-    await dbSet(`orders/${order.id}`, {
-      order_name: order.name,
-      customerName: order.customer?.first_name || "Customer",
-      phone,
-      status: "pending",
-      createdAt: Date.now(),
-    });
+    await dbSet(storeRef(`orders/${order.id}`), {
+  order_id: String(order.id),
+  order_name: order.name,
 
+  customer: {
+    name: order.customer?.first_name || "Customer",
+    phone
+  },
+
+  amount: {
+    total: order.total_price,
+    currency: order.currency
+  },
+
+  product: {
+    name: order.line_items?.[0]?.name || "Product",
+    qty: order.line_items?.[0]?.quantity || 1
+  },
+
+  status: "pending",
+
+  timeline: {
+    createdAt: Date.now(),
+    confirmedAt: null,
+    shippedAt: null,
+    deliveredAt: null
+  },
+
+  whatsapp: {
+    confirmation_sent: true,
+    shipped_sent: false
+  }
+});
     // Example for Shopify order template
     await sendWhatsAppTemplate(
       phone,
@@ -266,29 +305,34 @@ app.post("/webhook/shopify/fulfillment", express.json(), async (req, res) => {
 
   if (!orderId) return;
 
-  const order = await dbGet(`orders/${orderId}`);
+  // ✅ Fulfill hua ya nahi
+  if (fulfillment.status !== "success") return;
+
+  const order = await dbGet(storeRef(`orders/${orderId}`);
   if (!order) return;
 
-  // ✅ When order is SHIPPED
+  // 🟢 Send WhatsApp immediately on FULFILL
+  await sendWhatsAppTemplate(
+    order.phone,
+    TPL.YOUR_ORDER_IS_SHIPPED,   // your_order_is_shipped_2025
+    [
+      order.order_name           // {{1}}
+    ]
+  );
 
-    await sendWhatsAppTemplate(
-      order.phone,
-      TPL.YOUR_ORDER_IS_SHIPPED,   // your_order_is_shipped_2025
-      [
-        order.order_name           // {{1}} → Order ID
-      ]
-      // ❌ no buttons
-    );
+  await dbUpdate(storeRef(`orders/${orderId}`, {
+    status: "fulfilled",
+    "timeline/fulfilledAt": Date.now(),
+    "whatsapp/fulfilled_sent": true
+  });
 
-    await dbUpdate(`orders/${orderId}`, {
-      status: "shipped",
-      shippedAt: Date.now()
-    });
+  console.log("✅ Fulfill WhatsApp sent for order:", orderId);
 });
 // ---------------- HEALTH ----------------
 app.get("/health", (_, r) => r.json({ ok: true }));
 
 app.listen(PORT, () => console.log(`🚀 Server running on ${PORT}`));
+
 
 
 
