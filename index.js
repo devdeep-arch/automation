@@ -199,7 +199,7 @@ app.post("/webhook/whatsapp", express.json(), async (req, res) => {
 
   // Confirm button → 2 params
   if (action === PAYLOADS.CONFIRM_ORDER) {
-    await updateShopifyOrderNote(orderId, ✅ Order Confirmed);
+    await updateShopifyOrderNote(orderId, "✅ Order Confirmed" );
     templateName = "order_confirmed_reply";
     bodyParams = [
       order.customerName, // {{1}}
@@ -208,7 +208,7 @@ app.post("/webhook/whatsapp", express.json(), async (req, res) => {
   }
   // Cancel button → 1 param
   else if (action === PAYLOADS.CANCEL_ORDER) {
-    await updateShopifyOrderNote(orderId, ❌ Order Cancelled);
+    await updateShopifyOrderNote(orderId, "❌ Order Cancelled" );
     templateName = "order_cancelled_reply_auto";
     bodyParams = [
       order.order_name,   // {{1}}
@@ -330,6 +330,7 @@ app.post("/webhook/shopify/fulfillment", express.json(), async (req, res) => {
 app.get("/health", (_, r) => r.json({ ok: true }));
 
 app.listen(PORT, () => console.log(`🚀 Server running on ${PORT}`));
+
 
 
 
