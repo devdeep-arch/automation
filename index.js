@@ -29,6 +29,7 @@ const {
   SHOPIFY_WEBHOOK_SECRET,
   VERIFY_TOKEN_META = "shopify123",
   DEFAULT_COUNTRY_CODE = "92",
+  STORE_ID = "store_001", 
 } = process.env;
 
 if (!WHATSAPP_NUMBER_ID || !WHATSAPP_TOKEN || !SHOPIFY_SHOP || !SHOPIFY_ACCESS_TOKEN) {
@@ -48,11 +49,6 @@ admin.initializeApp({
 
 const db = admin.database();
 
-const STORE_ID = process.env.STORE_ID;
-if (!STORE_ID) {
-  console.error("❌ STORE_ID missing");
-  process.exit(1);
-}
 
 // ---------------- CONSTANTS (EARLY) ----------------
 export const TPL = {
@@ -83,8 +79,7 @@ const normalizePhone = (raw, cc = DEFAULT_COUNTRY_CODE) => {
 const dbSet = (p, d) => db.ref(p).set(d);
 const dbUpdate = (p, d) => db.ref(p).update(d);
 const dbGet = async (p) => (await db.ref(p).once("value")).val();
-const storeRef = (storeId, path = "") =>
-  path ? `stores/${STORE_ID}/${path}` : `stores/${STORE_ID}`;
+const storeRef = (path = "") => `stores/${STORE_ID}/${path}`;
 
 // ---------------- WHATSAPP SEND ----------------
 // ---------------- UNIVERSAL WHATSAPP TEMPLATE SENDER ----------------
@@ -335,6 +330,7 @@ app.post("/webhook/shopify/fulfillment", express.json(), async (req, res) => {
 app.get("/health", (_, r) => r.json({ ok: true }));
 
 app.listen(PORT, () => console.log(`🚀 Server running on ${PORT}`));
+
 
 
 
