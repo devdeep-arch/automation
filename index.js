@@ -83,7 +83,8 @@ const normalizePhone = (raw, cc = DEFAULT_COUNTRY_CODE) => {
 const dbSet = (p, d) => db.ref(p).set(d);
 const dbUpdate = (p, d) => db.ref(p).update(d);
 const dbGet = async (p) => (await db.ref(p).once("value")).val();
-const storeRef = (path = "") => `stores/${STORE_ID}/${path}`;
+const storeRef = (storeId, path = "") =>
+  path ? `stores/${storeId}/${path}` : `stores/${storeId}`;
 
 // ---------------- WHATSAPP SEND ----------------
 // ---------------- UNIVERSAL WHATSAPP TEMPLATE SENDER ----------------
@@ -332,6 +333,7 @@ app.post("/webhook/shopify/fulfillment", express.json(), async (req, res) => {
 app.get("/health", (_, r) => r.json({ ok: true }));
 
 app.listen(PORT, () => console.log(`🚀 Server running on ${PORT}`));
+
 
 
 
