@@ -84,7 +84,7 @@ const dbSet = (p, d) => db.ref(p).set(d);
 const dbUpdate = (p, d) => db.ref(p).update(d);
 const dbGet = async (p) => (await db.ref(p).once("value")).val();
 const storeRef = (storeId, path = "") =>
-  path ? `stores/${storeId}/${path}` : `stores/${storeId}`;
+  path ? `stores/${STORE_ID}/${path}` : `stores/${STORE_ID}`;
 
 // ---------------- WHATSAPP SEND ----------------
 // ---------------- UNIVERSAL WHATSAPP TEMPLATE SENDER ----------------
@@ -204,6 +204,7 @@ app.post("/webhook/whatsapp", express.json(), async (req, res) => {
 
   // Confirm button → 2 params
   if (action === PAYLOADS.CONFIRM_ORDER) {
+    await updateShopifyOrderNote(orderId, ✅ Order Confirmed);
     templateName = "order_confirmed_reply";
     bodyParams = [
       order.customerName, // {{1}}
@@ -212,6 +213,7 @@ app.post("/webhook/whatsapp", express.json(), async (req, res) => {
   }
   // Cancel button → 1 param
   else if (action === PAYLOADS.CANCEL_ORDER) {
+    await updateShopifyOrderNote(orderId, ❌ Order Cancelled);
     templateName = "order_cancelled_reply_auto";
     bodyParams = [
       order.order_name,   // {{1}}
@@ -333,6 +335,7 @@ app.post("/webhook/shopify/fulfillment", express.json(), async (req, res) => {
 app.get("/health", (_, r) => r.json({ ok: true }));
 
 app.listen(PORT, () => console.log(`🚀 Server running on ${PORT}`));
+
 
 
 
