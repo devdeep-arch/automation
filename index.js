@@ -315,7 +315,8 @@ app.post("/webhook/shopify/fulfillment", express.json(), async (req, res) => {
     TPL.YOUR_ORDER_IS_SHIPPED,   // your_order_is_shipped_2025
     [
       order.order_name           // {{1}}
-    ]
+    ], 
+   []
   );
 
   await dbUpdate(storeRef(`orders/${orderId}`, {
@@ -330,6 +331,7 @@ app.post("/webhook/shopify/fulfillment", express.json(), async (req, res) => {
 app.get("/health", (_, r) => r.json({ ok: true }));
 
 app.listen(PORT, () => console.log(`🚀 Server running on ${PORT}`));
+
 
 
 
