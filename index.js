@@ -322,7 +322,7 @@ app.post("/webhook/shopify/fulfillment", express.json(), async (req, res) => {
     status: "fulfilled",
     "timeline/fulfilledAt": Date.now(),
     "whatsapp/fulfilled_sent": true
-  });
+  }));
 
   console.log("✅ Fulfill WhatsApp sent for order:", orderId);
 });
@@ -330,6 +330,7 @@ app.post("/webhook/shopify/fulfillment", express.json(), async (req, res) => {
 app.get("/health", (_, r) => r.json({ ok: true }));
 
 app.listen(PORT, () => console.log(`🚀 Server running on ${PORT}`));
+
 
 
 
