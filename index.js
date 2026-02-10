@@ -306,7 +306,7 @@ app.post("/webhook/shopify/fulfillment", express.json(), async (req, res) => {
   if (!orderId) return;
 
   // ✅ Sirf successful fulfillment pe
-  if (fulfillment.status !== "success") return;
+  if (fulfillment.fulfillment_status !== "fulfilled") return;
 
   const order = await dbGet(storeRef(`orders/${orderId}`));
   if (!order?.customer?.phone) return;
@@ -337,6 +337,7 @@ app.post("/webhook/shopify/fulfillment", express.json(), async (req, res) => {
 app.get("/health", (_, r) => r.json({ ok: true }));
 
 app.listen(PORT, () => console.log(`🚀 Server running on ${PORT}`));
+
 
 
 
