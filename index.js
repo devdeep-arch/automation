@@ -299,31 +299,35 @@ app.post("/webhook/shopify/fulfillment", express.json(), async (req, res) => {
   res.sendStatus(200);
 
   const fulfillment = req.body;
-  const orderId = String(fulfillment.order_id);
+  const orderId = String(fulfillment?.order_id);
 
   if (!orderId) return;
 
-  // ✅ Fulfill hua ya nahi
+  // ✅ Sirf successful fulfillment pe
   if (fulfillment.status !== "success") return;
 
   const order = await dbGet(storeRef(`orders/${orderId}`));
-  if (!order) return;
+  if (!order?.customer?.phone) return;
 
-  // 🟢 Send WhatsApp immediately on FULFILL
+  // 🟢 Send WhatsApp on SHIPPED
   await sendWhatsAppTemplate(
     order.customer.phone,
-    "your_order_is_shipped_2025",   // your_order_is_shipped_2025
+    "your_order_is_shipped_2025",
     [
-      order.order_name           // {{1}}
-    ], 
-   []
+      order.order_name   // {{1}}
+    ],
+    []
   );
 
-  await dbUpdate(storeRef(`orders/${orderId}`, {
-    status: "fulfilled",
-    "timeline/fulfilledAt": Date.now(),
-    "whatsapp/fulfilled_sent": true
-  }));
+  // ✅ CORRECT dbUpdate usage
+  await dbUpdate(
+    storeRef(`orders/${orderId}`),
+    {
+      status: "fulfilled",
+      "timeline.fulfilledAt": Date.now(),
+      "whatsapp.fulfilled_sent": true
+    }
+  );
 
   console.log("✅ Fulfill WhatsApp sent for order:", orderId);
 });
@@ -331,6 +335,7 @@ app.post("/webhook/shopify/fulfillment", express.json(), async (req, res) => {
 app.get("/health", (_, r) => r.json({ ok: true }));
 
 app.listen(PORT, () => console.log(`🚀 Server running on ${PORT}`));
+
 
 
 
