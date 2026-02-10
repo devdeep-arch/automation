@@ -202,7 +202,7 @@ app.post("/webhook/whatsapp", express.json(), async (req, res) => {
     await updateShopifyOrderNote(orderId, "✅ Order Confirmed" );
     templateName = "order_confirmed_reply";
     bodyParams = [
-      order.customerName, // {{1}}
+      order.customer.name, // {{1}}
       order.order_name,   // {{2}}
     ];
   }
@@ -330,6 +330,7 @@ app.post("/webhook/shopify/fulfillment", express.json(), async (req, res) => {
 app.get("/health", (_, r) => r.json({ ok: true }));
 
 app.listen(PORT, () => console.log(`🚀 Server running on ${PORT}`));
+
 
 
 
