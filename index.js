@@ -311,8 +311,8 @@ app.post("/webhook/shopify/fulfillment", express.json(), async (req, res) => {
 
   // 🟢 Send WhatsApp immediately on FULFILL
   await sendWhatsAppTemplate(
-    order.phone,
-    TPL.YOUR_ORDER_IS_SHIPPED,   // your_order_is_shipped_2025
+    order.customer.phone,
+    "your_order_is_shipped_2025",   // your_order_is_shipped_2025
     [
       order.order_name           // {{1}}
     ], 
@@ -331,6 +331,7 @@ app.post("/webhook/shopify/fulfillment", express.json(), async (req, res) => {
 app.get("/health", (_, r) => r.json({ ok: true }));
 
 app.listen(PORT, () => console.log(`🚀 Server running on ${PORT}`));
+
 
 
 
