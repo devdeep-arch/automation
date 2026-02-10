@@ -306,7 +306,7 @@ app.post("/webhook/shopify/fulfillment", express.json(), async (req, res) => {
   // ✅ Fulfill hua ya nahi
   if (fulfillment.status !== "success") return;
 
-  const order = await dbGet(storeRef(`orders/${orderId}`);
+  const order = await dbGet(storeRef(`orders/${orderId}`));
   if (!order) return;
 
   // 🟢 Send WhatsApp immediately on FULFILL
@@ -330,6 +330,7 @@ app.post("/webhook/shopify/fulfillment", express.json(), async (req, res) => {
 app.get("/health", (_, r) => r.json({ ok: true }));
 
 app.listen(PORT, () => console.log(`🚀 Server running on ${PORT}`));
+
 
 
 
