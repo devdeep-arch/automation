@@ -300,7 +300,7 @@ app.post("/webhook/shopify/fulfillment", express.json(), async (req, res) => {
 
   
   const fulfillment = req.body;
-  const orderId = String(fulfillment?.order_id);
+  const orderId = String(fulfillment?.fulfillments?.order_id);
 
   if (!orderId) return;
 
@@ -336,6 +336,7 @@ app.post("/webhook/shopify/fulfillment", express.json(), async (req, res) => {
 app.get("/health", (_, r) => r.json({ ok: true }));
 
 app.listen(PORT, () => console.log(`🚀 Server running on ${PORT}`));
+
 
 
 
