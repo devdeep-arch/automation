@@ -218,12 +218,12 @@ app.post("/webhook/whatsapp", express.json(), async (req, res) => {
   await sendWhatsAppTemplate(phone, templateName, bodyParams, []); // No buttons in reply
   await dbUpdate(storeRef(`orders/${orderId}`), {
     status: action === PAYLOADS.CONFIRM_ORDER ? "confirmed" : "cancelled",
-    "timeline.lastCustomerReplyAt": Date.now(),
+    "timeline/lastCustomerReplyAt": Date.now(),
     ...(action === PAYLOADS.CONFIRM_ORDER && {
-      "timeline.confirmedAt": Date.now()
+      "timeline/confirmedAt": Date.now()
     }),
     ...(action === PAYLOADS.CANCEL_ORDER && {
-      "timeline.cancelledAt": Date.now()
+      "timeline/cancelledAt": Date.now()
     })
   });
 });
@@ -325,8 +325,8 @@ app.post("/webhook/shopify/fulfillment", express.json(), async (req, res) => {
     storeRef(`orders/${orderId}`),
     {
       status: "fulfilled",
-      "timeline.fulfilledAt": Date.now(),
-      "whatsapp.fulfilled_sent": true
+      "timeline/fulfilledAt": Date.now(),
+      "whatsapp/fulfilled_sent": true
     }
   );
 
@@ -336,6 +336,7 @@ app.post("/webhook/shopify/fulfillment", express.json(), async (req, res) => {
 app.get("/health", (_, r) => r.json({ ok: true }));
 
 app.listen(PORT, () => console.log(`🚀 Server running on ${PORT}`));
+
 
 
 
