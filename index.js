@@ -1,4 +1,4 @@
-// CLEAN, CONSOLIDATED, SAFE SINGLE-FILE IMPLEMENTATION
+q// CLEAN, CONSOLIDATED, SAFE SINGLE-FILE IMPLEMENTATION
 // ----------------------------------------------------
 // ✔ One Meta webhook
 // ✔ One Shopify order-create webhook
@@ -300,7 +300,7 @@ app.post("/webhook/shopify/fulfillment", express.json(), async (req, res) => {
 
   
   const fulfillment = req.body;
-  const orderId = String(fulfillment?.fulfillments?.order_id);
+  const orderId = String(fulfillment?.id);
 
   if (!orderId) return;
 
@@ -336,6 +336,7 @@ app.post("/webhook/shopify/fulfillment", express.json(), async (req, res) => {
 app.get("/health", (_, r) => r.json({ ok: true }));
 
 app.listen(PORT, () => console.log(`🚀 Server running on ${PORT}`));
+
 
 
 
