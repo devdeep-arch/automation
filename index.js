@@ -182,7 +182,7 @@ app.get("/webhook/whatsapp", (req, res) => {
 
 // Meta needs JSON, Shopify needs RAW → separate
 app.post("/webhook/whatsapp", express.json(), async (req, res) => {
-  res.sendStatus(200);
+  res.sendStatus(200);  
 
   const msg = req.body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
   if (!msg) return;
@@ -190,7 +190,8 @@ app.post("/webhook/whatsapp", express.json(), async (req, res) => {
   const phone = normalizePhone(msg.from);
   if (!phone) return;
 
-  const [action, orderId] = msg.button?.payload?.split(":") || [];
+  const [action, storeId, orderId] = msg.button?.payload?.split(":") || [];
+  const storeRef = (path = "") => `stores/${storeId}/${path}`;
   const order = await dbGet(storeRef(`orders/${orderId}`));
   if (!order) return;
 
@@ -248,8 +249,8 @@ app.post(
     const phone = normalizePhone(order.shipping_address?.phone || order.customer?.phone);
     if (!phone) return;
 
-    const payloadConfirm = `${PAYLOADS.CONFIRM_ORDER}:${order.id}`;
-    const payloadCancel = `${PAYLOADS.CANCEL_ORDER}:${order.id}`;
+    const payloadConfirm = `${PAYLOADS.CONFIRM_ORDER}:${storeId}:${order.id}`;
+    const payloadCancel = `${PAYLOADS.CANCEL_ORDER}:${storeId}:${order.id}`;
 
     await dbSet(storeRef(`orders/${order.id}`), {
   order_id: String(order.id),
@@ -307,6 +308,15 @@ app.post(
 app.post("/webhook/shopify/fulfillment", express.json(), async (req, res) => {
   res.sendStatus(200);
 
+  const shopDomain = req.get("X-Shopify-Shop-Domain");
+    const shopUsername = shopDomain.replace(".myshopify.com", "").toLowerCase();
+
+    const index = await dbGet(`index/${shopUsername}`);
+    if (!index?.storeId) return;
+
+    const storeId = index.storeId;
+    const storeRef = (path = "") => `stores/${storeId}/${path}`;
+
   
   const fulfillment = req.body;
   const orderId = String(fulfillment?.id);
@@ -345,6 +355,7 @@ app.post("/webhook/shopify/fulfillment", express.json(), async (req, res) => {
 app.get("/health", (_, r) => r.json({ ok: true }));
 
 app.listen(PORT, () => console.log(`🚀 Server running on ${PORT}`));
+
 
 
 
