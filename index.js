@@ -248,7 +248,6 @@ async function findLatestStoreByPhone(phone) {
 
 // Meta needs JSON, Shopify needs RAW → separate
 app.post("/webhook/whatsapp", express.json(), async (req, res) => {
-app.post("/webhook/whatsapp", express.json(), async (req, res) => {
   res.sendStatus(200);
 
   const msg = req.body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
@@ -511,6 +510,7 @@ app.post("/webhook/shopify/fulfillment", express.json(), async (req, res) => {
 app.get("/health", (_, r) => r.json({ ok: true }));
 
 app.listen(PORT, () => console.log(`🚀 Server running on ${PORT}`));
+
 
 
 
