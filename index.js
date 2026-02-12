@@ -89,39 +89,47 @@ const dbGet = async (p) => (await db.ref(p).once("value")).val();
  * @param {Array} bodyParams - Array of strings for body parameters (any length)
  * @param {Array} buttonsPayload - Array of button payloads (optional)
  */
-async function sendWhatsAppTemplate(phone, templateName, bodyParams = [], buttonsPayload = []) {
+async function sendWhatsAppTemplate(phone, templateName, bodyParams = [], quickReplyPayloads = [], urlButton = null) {
   if (!phone || !templateName) {
     console.error("❌ Phone or template name missing");
     return;
   }
 
-  // Components array
   const components = [];
 
+  // Body parameters
   if (bodyParams.length > 0) {
     components.push({
       type: "body",
-      parameters: bodyParams.map((p) => ({ type: "text", text: p })),
+      parameters: bodyParams.map(p => ({ type: "text", text: p })),
     });
   }
 
-  if (buttonsPayload.length > 0) {
-    buttonsPayload.forEach((payload, index) => {
+  // Quick reply buttons
+  if (quickReplyPayloads.length > 0) {
+    quickReplyPayloads.forEach((payload, i) => {
       components.push({
         type: "button",
         sub_type: "quick_reply",
-        index: index.toString(),
+        index: i.toString(),
         parameters: [{ type: "payload", payload }],
       });
     });
   }
 
-   if (buttonsPayload.length > 0) {
-      components.push({
-        type: "button",
-        sub_type: "url",
-        index: index.toString(),
-        parameters: bodyParams.map((p) => ({ type: "text", text: p })),
+  // URL button
+  if (urlButton) {
+    // urlButton = { index: 0, text: "View Order", url: "https://..." }
+    components.push({
+      type: "button",
+      sub_type: "url",
+      index: urlButton.index.toString(),
+      parameters: [
+        {
+          type: "text",
+          text: urlButton.url, // Meta now expects "text" key with URL inside
+        },
+      ],
     });
   }
 
@@ -151,7 +159,6 @@ async function sendWhatsAppTemplate(phone, templateName, bodyParams = [], button
     console.error("🔥 WhatsApp send error:", err.response?.data || err.message);
   }
 }
-
 
 app.get("/contact/:data", async (req, res) => {
 
@@ -249,8 +256,9 @@ async function findLatestStoreByPhone(phone) {
 }
 
 // Meta needs JSON, Shopify needs RAW → separate
+// ---------------- META WHATSAPP WEBHOOK ----------------
 app.post("/webhook/whatsapp", express.json(), async (req, res) => {
-  res.sendStatus(200);
+  res.sendStatus(200);  
 
   const msg = req.body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
   if (!msg) return;
@@ -258,36 +266,26 @@ app.post("/webhook/whatsapp", express.json(), async (req, res) => {
   const phone = normalizePhone(msg.from);
   if (!phone) return;
 
+  // Extract button payload if any
   const [action, storeId, orderId] = msg.button?.payload?.split(":") || [];
 
-  // ===============================
-  // RANDOM MESSAGE CASE
-  // ===============================
-  if (!action) {
+  const storeRef = (path = "") => `stores/${storeId}/${path}`;
 
-    const latest = await findLatestStoreByPhone(phone);
-    if (!latest) return;
+  let order = null;
 
-    const order = await dbGet(`stores/${latest.storeId}/orders/${latest.orderId}`);
-    if (!order) return;
-
-    if (!["confirmed", "cancelled"].includes(order.status)) return;
-
-    const combined = `${latest.storeId}_${latest.orderId}`;
-
-    await sendWhatsAppTemplate(
-      phone,
-      "call_us_template",
-      [order.status.toUpperCase()],  // CONFIRMED / CANCELLED
-      [combined]
-    );
-
-    return;
+  // If storeId/orderId exists in button payload → fetch that order
+  if (storeId && orderId) {
+    order = await dbGet(storeRef(`orders/${orderId}`));
   }
 
-  const storeRef = (path = "") => `stores/${storeId}/${path}`;
-  const order = await dbGet(storeRef(`orders/${orderId}`));
-  if (!order) return;
+  // Otherwise → find latest order from this phone across all stores
+  if (!order) {
+    const latest = await findLatestStoreByPhone(phone);
+    if (!latest) return; // No matching order
+    order = latest.order;
+    storeId = latest.storeId;
+    orderId = latest.orderId;
+  }
 
   const store = await dbGet(storeRef(`secrets`));
   if (!store) return;
@@ -295,72 +293,52 @@ app.post("/webhook/whatsapp", express.json(), async (req, res) => {
   const shop = store.SHOPIFY_SHOP;
   const access = store.SHOPIFY_ACCESS_TOKEN;
 
-  const previousStatus = order.status || "pending";
-  const combined = `${storeId}_${orderId}`;
-
   let templateName = "";
   let bodyParams = [];
+  let quickReplyPayloads = [];
 
-  // ===============================
-  // CONFIRM BUTTON
-  // ===============================
+  // Determine what template to send
   if (action === PAYLOADS.CONFIRM_ORDER) {
-
-    // If already cancelled or confirmed → send call template
-    if (["confirmed", "cancelled"].includes(previousStatus)) {
-
-      await sendWhatsAppTemplate(
-        phone,
-        "call_us_template",
-        [previousStatus.toUpperCase()],
-        [combined]
-      );
-
-      return;
-    }
-
     await updateShopifyOrderNote(orderId, shop, access, "✅ Order Confirmed");
-
     templateName = "order_confirmed_reply";
     bodyParams = [
       order.customer.name,
       order.order_name,
     ];
-  }
-
-  // ===============================
-  // CANCEL BUTTON
-  // ===============================
-  else if (action === PAYLOADS.CANCEL_ORDER) {
-
-    if (["confirmed", "cancelled"].includes(previousStatus)) {
-
-      await sendWhatsAppTemplate(
-        phone,
-        "call_us_template",
-        [previousStatus.toUpperCase()],
-        [combined]
-      );
-
-      return;
-    }
-
+  } else if (action === PAYLOADS.CANCEL_ORDER) {
     await updateShopifyOrderNote(orderId, shop, access, "❌ Order Cancelled");
-
     templateName = "order_cancelled_reply_auto";
     bodyParams = [
       order.order_name,
     ];
   }
 
-  // ===============================
-  // NORMAL FLOW
-  // ===============================
+  // Determine body param for "call_us_template" if user presses again or random message
+  let statusText = order.status === "confirmed" ? "CONFIRMED" :
+                   order.status === "cancelled" ? "CANCELLED" : "";
 
-  await sendWhatsAppTemplate(phone, templateName, bodyParams, []);
+  // WhatsApp prefilled link to contact store owner
+  const ownerPhone = store.OWNER_PHONE; // Put this in store secrets
+  const orderLink = `https://web.whatsapp.com/send/?phone=${ownerPhone}&text=Hey+mujhe+order+%23${order.order_id}+ke+bare+me+baat+karni+hai`;
 
+  // Send the main template
+  await sendWhatsAppTemplate(
+    phone,
+    templateName,
+    bodyParams,
+    quickReplyPayloads,
+    {
+      index: 0,
+      text: "View Order / Contact Store",
+      url: orderLink
+    }
+  );
+
+  // Update DB
   await dbUpdate(storeRef(`orders/${orderId}`), {
-    status: action === PAYLOADS.CONFIRM_ORDER ? "confirmed" : "cancelled",
+    status: action === PAYLOADS.CONFIRM_ORDER ? "confirmed" :
+            action === PAYLOADS.CANCEL_ORDER ? "cancelled" :
+            order.status,
     "timeline/lastCustomerReplyAt": Date.now(),
     ...(action === PAYLOADS.CONFIRM_ORDER && {
       "timeline/confirmedAt": Date.now(),
@@ -376,6 +354,20 @@ app.post("/webhook/whatsapp", express.json(), async (req, res) => {
     }
   });
 
+  // If random message or double press → send "call_us_template" with status
+  if (!action || (action && order.status !== (action === PAYLOADS.CONFIRM_ORDER ? "confirmed" : "cancelled"))) {
+    await sendWhatsAppTemplate(
+      phone,
+      "call_us_template",
+      [statusText || "PENDING"],
+      [],
+      {
+        index: 0,
+        text: "Contact Store",
+        url: orderLink
+      }
+    );
+  }
 });
 // ---------------- SHOPIFY ORDER CREATE ----------------
 app.post(
@@ -512,6 +504,7 @@ app.post("/webhook/shopify/fulfillment", express.json(), async (req, res) => {
 app.get("/health", (_, r) => r.json({ ok: true }));
 
 app.listen(PORT, () => console.log(`🚀 Server running on ${PORT}`));
+
 
 
 
