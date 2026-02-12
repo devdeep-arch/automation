@@ -19,6 +19,8 @@ import axios from "axios";
 import admin from "firebase-admin";
 import cron from "node-cron";
 
+const app = express();
+
 // ---------------- ENV ----------------
 const {
   PORT = 3000,
@@ -511,6 +513,7 @@ app.post("/webhook/shopify/fulfillment", express.json(), async (req, res) => {
 app.get("/health", (_, r) => r.json({ ok: true }));
 
 app.listen(PORT, () => console.log(`🚀 Server running on ${PORT}`));
+
 
 
 
