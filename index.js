@@ -120,7 +120,7 @@ async function sendWhatsAppTemplate(phone, templateName, bodyParams = [], button
       components.push({
         type: "button",
         sub_type: "url",
-        index: "0",
+        index: index.toString(),
         parameters: bodyParams.map((p) => ({ type: "text", text: p })),
     });
   }
@@ -512,6 +512,7 @@ app.post("/webhook/shopify/fulfillment", express.json(), async (req, res) => {
 app.get("/health", (_, r) => r.json({ ok: true }));
 
 app.listen(PORT, () => console.log(`🚀 Server running on ${PORT}`));
+
 
 
 
