@@ -155,9 +155,9 @@ async function updateShopifyOrderNote(orderId, shop, access, note) {
   });
 }
 
-function verifyShopify(req, buf) {
+function verifyShopify(webhook, req, buf) {
   const hmac = req.get("X-Shopify-Hmac-Sha256");
-  const hash = crypto.createHmac("sha256", SHOPIFY_WEBHOOK_SECRET).update(buf).digest("base64");
+  const hash = crypto.createHmac("sha256", webhook).update(buf).digest("base64");
   return hmac === hash;
 }
 
@@ -197,8 +197,8 @@ app.post("/webhook/whatsapp", express.json(), async (req, res) => {
   const store = await dbGet(storeRef(`secrets`));
   if (!store) return;
 
-  const shop = secrets.SHOPIFY_SHOP;
-  const access = secrets.SHOPIFY_ACCESS_TOKEN;
+  const shop = store.SHOPIFY_SHOP;
+  const access = store.SHOPIFY_ACCESS_TOKEN;
 
   let templateName = "";
   let bodyParams = [];
@@ -251,7 +251,12 @@ app.post(
     const storeId = index.storeId;
     const storeRef = (path = "") => `stores/${storeId}/${path}`;
 
-    if (!verifyShopify(req, req.body)) return;
+    const store = await dbGet(storeRef(`secrets`));
+    if (!store) return;
+
+    const webhook = store.SHOPIFY_WEBHOOK_SECRET;
+
+    if (!verifyShopify(webhook, req, req.body)) return;
 
     const order = JSON.parse(req.body.toString());
     const phone = normalizePhone(order.shipping_address?.phone || order.customer?.phone);
@@ -364,6 +369,7 @@ app.post("/webhook/shopify/fulfillment", express.json(), async (req, res) => {
 app.get("/health", (_, r) => r.json({ ok: true }));
 
 app.listen(PORT, () => console.log(`🚀 Server running on ${PORT}`));
+
 
 
 
