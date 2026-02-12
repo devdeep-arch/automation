@@ -24,14 +24,11 @@ const {
   PORT = 3000,
   WHATSAPP_NUMBER_ID,
   WHATSAPP_TOKEN,
-  SHOPIFY_SHOP,
-  SHOPIFY_ACCESS_TOKEN,
-  SHOPIFY_WEBHOOK_SECRET,
   VERIFY_TOKEN_META = "shopify123",
   DEFAULT_COUNTRY_CODE = "92",
 } = process.env;
 
-if (!WHATSAPP_NUMBER_ID || !WHATSAPP_TOKEN || !SHOPIFY_SHOP || !SHOPIFY_ACCESS_TOKEN) {
+if (!WHATSAPP_NUMBER_ID || !WHATSAPP_TOKEN) {
   console.error("❌ Missing required env vars");
   process.exit(1);
 }
@@ -370,6 +367,7 @@ app.post("/webhook/shopify/fulfillment", express.json(), async (req, res) => {
 app.get("/health", (_, r) => r.json({ ok: true }));
 
 app.listen(PORT, () => console.log(`🚀 Server running on ${PORT}`));
+
 
 
 
