@@ -232,6 +232,7 @@ app.post("/webhook/whatsapp", express.json(), async (req, res) => {
       "timeline/cancelledAt": Date.now()
     }),
     whatsapp: {
+    confirmation_sent: true,
     confirmation_reply: true
   }
   });
@@ -369,6 +370,7 @@ app.post("/webhook/shopify/fulfillment", express.json(), async (req, res) => {
 app.get("/health", (_, r) => r.json({ ok: true }));
 
 app.listen(PORT, () => console.log(`🚀 Server running on ${PORT}`));
+
 
 
 
