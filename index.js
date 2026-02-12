@@ -176,6 +176,42 @@ app.get("/webhook/whatsapp", (req, res) => {
   return res.sendStatus(403);
 });
 
+async function findLatestStoreByPhone(phone) {
+  const storesSnap = await db.ref("stores").once("value");
+  const stores = storesSnap.val();
+  if (!stores) return null;
+
+  let latestMatch = null;
+  let latestTime = 0;
+
+  for (const storeId in stores) {
+    const orders = stores[storeId].orders;
+    if (!orders) continue;
+
+    for (const orderId in orders) {
+      const order = orders[orderId];
+
+      if (order.customer?.phone === phone) {
+        const time =
+          order.timeline?.lastMsgSentAt ||
+          order.timeline?.createdAt ||
+          0;
+
+        if (time > latestTime) {
+          latestTime = time;
+          latestMatch = {
+            storeId,
+            orderId,
+            order
+          };
+        }
+      }
+    }
+  }
+
+  return latestMatch;
+}
+
 // Meta needs JSON, Shopify needs RAW → separate
 app.post("/webhook/whatsapp", express.json(), async (req, res) => {
   res.sendStatus(200);  
@@ -186,6 +222,8 @@ app.post("/webhook/whatsapp", express.json(), async (req, res) => {
   const phone = normalizePhone(msg.from);
   if (!phone) return;
 
+
+  
   const [action, storeId, orderId] = msg.button?.payload?.split(":") || [];
   const storeRef = (path = "") => `stores/${storeId}/${path}`;
   const order = await dbGet(storeRef(`orders/${orderId}`));
@@ -223,10 +261,12 @@ app.post("/webhook/whatsapp", express.json(), async (req, res) => {
     status: action === PAYLOADS.CONFIRM_ORDER ? "confirmed" : "cancelled",
     "timeline/lastCustomerReplyAt": Date.now(),
     ...(action === PAYLOADS.CONFIRM_ORDER && {
-      "timeline/confirmedAt": Date.now()
+      "timeline/confirmedAt": Date.now(),
+      "timeline/lastMsgSentAt": Date.now()
     }),
     ...(action === PAYLOADS.CANCEL_ORDER && {
-      "timeline/cancelledAt": Date.now()
+      "timeline/cancelledAt": Date.now(),
+      "timeline/lastMsgSentAt": Date.now()
     }),
     whatsapp: {
     confirmation_sent: true,
@@ -288,7 +328,8 @@ app.post(
     createdAt: Date.now(),
     confirmedAt: "waiting",
     fulfilledAt: "waiting",
-    deliveredAt: "waiting"
+    deliveredAt: "waiting",
+    lastMsgSentAt: Date.now()
   },
 
   whatsapp: {
@@ -357,7 +398,8 @@ app.post("/webhook/shopify/fulfillment", express.json(), async (req, res) => {
     {
       status: "fulfilled",
       "timeline/fulfilledAt": Date.now(),
-      "whatsapp/fulfilled_sent": true
+      "whatsapp/fulfilled_sent": true,
+      "timeline/lastMsgSentAt": Date.now()
     }
   );
 
@@ -367,6 +409,7 @@ app.post("/webhook/shopify/fulfillment", express.json(), async (req, res) => {
 app.get("/health", (_, r) => r.json({ ok: true }));
 
 app.listen(PORT, () => console.log(`🚀 Server running on ${PORT}`));
+
 
 
 
