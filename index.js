@@ -152,7 +152,7 @@ async function sendWhatsAppTemplate(phone, templateName, bodyParams = [], button
 
 app.get("/contact/:data", async (req, res) => {
 
-  const [storeId, orderId] = req.params.data.split("_");
+  const [storeId, orderId] = req.params.data.split("-");
 
   const store = await dbGet(`stores/${storeId}/secrets`);
   const order = await dbGet(`stores/${storeId}/orders/${orderId}`);
@@ -443,6 +443,7 @@ app.post("/webhook/shopify/fulfillment", express.json(), async (req, res) => {
 app.get("/health", (_, r) => r.json({ ok: true }));
 
 app.listen(PORT, () => console.log(`🚀 Server running on ${PORT}`));
+
 
 
 
