@@ -196,7 +196,6 @@ function verifyShopify(webhook, req, buf) {
 }
 
 // ---------------- EXPRESS ----------------
-const app = express();
 
 // ---------------- META WEBHOOK VERIFY ----------------
 app.get("/webhook/whatsapp", (req, res) => {
@@ -513,6 +512,7 @@ app.post("/webhook/shopify/fulfillment", express.json(), async (req, res) => {
 app.get("/health", (_, r) => r.json({ ok: true }));
 
 app.listen(PORT, () => console.log(`🚀 Server running on ${PORT}`));
+
 
 
 
