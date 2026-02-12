@@ -139,6 +139,31 @@ async function sendWhatsAppTemplate(phone, templateName, bodyParams = [], button
     console.error("🔥 WhatsApp send error:", err.response?.data || err.message);
   }
 }
+
+
+app.get("/contact/:data", async (req, res) => {
+
+  const [storeId, orderId] = req.params.data.split("_");
+
+  const store = await dbGet(`stores/${storeId}/secrets`);
+  const order = await dbGet(`stores/${storeId}/orders/${orderId}`);
+
+  if (!store || !order) {
+    return res.send("Invalid link");
+  }
+
+  const ownerPhone = store.owner_phone.replace("+", "");
+
+  const message = encodeURIComponent(
+    `Hey mujhe order ${order.order_name} ke bare me baat karni hai`
+  );
+
+  const waLink = `https://wa.me/${ownerPhone}?text=${message}`;
+
+  res.redirect(waLink);
+});
+
+
 // ---------------- SHOPIFY HELPERS ----------------
 async function updateShopifyOrderNote(orderId, shop, access, note) {
   const url = `https://${shop}/admin/api/2024-01/orders/${orderId}.json`;
@@ -409,6 +434,7 @@ app.post("/webhook/shopify/fulfillment", express.json(), async (req, res) => {
 app.get("/health", (_, r) => r.json({ ok: true }));
 
 app.listen(PORT, () => console.log(`🚀 Server running on ${PORT}`));
+
 
 
 
