@@ -248,7 +248,8 @@ async function findLatestStoreByPhone(phone) {
 
 // Meta needs JSON, Shopify needs RAW → separate
 app.post("/webhook/whatsapp", express.json(), async (req, res) => {
-  res.sendStatus(200);  
+app.post("/webhook/whatsapp", express.json(), async (req, res) => {
+  res.sendStatus(200);
 
   const msg = req.body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
   if (!msg) return;
@@ -256,41 +257,107 @@ app.post("/webhook/whatsapp", express.json(), async (req, res) => {
   const phone = normalizePhone(msg.from);
   if (!phone) return;
 
-
-  
   const [action, storeId, orderId] = msg.button?.payload?.split(":") || [];
+
+  // ===============================
+  // RANDOM MESSAGE CASE
+  // ===============================
+  if (!action) {
+
+    const latest = await findLatestStoreByPhone(phone);
+    if (!latest) return;
+
+    const order = await dbGet(`stores/${latest.storeId}/orders/${latest.orderId}`);
+    if (!order) return;
+
+    if (!["confirmed", "cancelled"].includes(order.status)) return;
+
+    const combined = `${latest.storeId}_${latest.orderId}`;
+
+    await sendWhatsAppTemplate(
+      phone,
+      "call_us_template",
+      [order.status.toUpperCase()],  // CONFIRMED / CANCELLED
+      [combined]
+    );
+
+    return;
+  }
+
   const storeRef = (path = "") => `stores/${storeId}/${path}`;
   const order = await dbGet(storeRef(`orders/${orderId}`));
   if (!order) return;
-  
+
   const store = await dbGet(storeRef(`secrets`));
   if (!store) return;
 
   const shop = store.SHOPIFY_SHOP;
   const access = store.SHOPIFY_ACCESS_TOKEN;
 
+  const previousStatus = order.status || "pending";
+  const combined = `${storeId}_${orderId}`;
+
   let templateName = "";
   let bodyParams = [];
 
-  // Confirm button → 2 params
+  // ===============================
+  // CONFIRM BUTTON
+  // ===============================
   if (action === PAYLOADS.CONFIRM_ORDER) {
-    await updateShopifyOrderNote(orderId, shop, access, "✅ Order Confirmed" );
+
+    // If already cancelled or confirmed → send call template
+    if (["confirmed", "cancelled"].includes(previousStatus)) {
+
+      await sendWhatsAppTemplate(
+        phone,
+        "call_us_template",
+        [previousStatus.toUpperCase()],
+        [combined]
+      );
+
+      return;
+    }
+
+    await updateShopifyOrderNote(orderId, shop, access, "✅ Order Confirmed");
+
     templateName = "order_confirmed_reply";
     bodyParams = [
-      order.customer.name, // {{1}}
-      order.order_name,   // {{2}}
-    ];
-  }
-  // Cancel button → 1 param
-  else if (action === PAYLOADS.CANCEL_ORDER) {
-    await updateShopifyOrderNote(orderId, shop, access, "❌ Order Cancelled" );
-    templateName = "order_cancelled_reply_auto";
-    bodyParams = [
-      order.order_name,   // {{1}}
+      order.customer.name,
+      order.order_name,
     ];
   }
 
-  await sendWhatsAppTemplate(phone, templateName, bodyParams, []); // No buttons in reply
+  // ===============================
+  // CANCEL BUTTON
+  // ===============================
+  else if (action === PAYLOADS.CANCEL_ORDER) {
+
+    if (["confirmed", "cancelled"].includes(previousStatus)) {
+
+      await sendWhatsAppTemplate(
+        phone,
+        "call_us_template",
+        [previousStatus.toUpperCase()],
+        [combined]
+      );
+
+      return;
+    }
+
+    await updateShopifyOrderNote(orderId, shop, access, "❌ Order Cancelled");
+
+    templateName = "order_cancelled_reply_auto";
+    bodyParams = [
+      order.order_name,
+    ];
+  }
+
+  // ===============================
+  // NORMAL FLOW
+  // ===============================
+
+  await sendWhatsAppTemplate(phone, templateName, bodyParams, []);
+
   await dbUpdate(storeRef(`orders/${orderId}`), {
     status: action === PAYLOADS.CONFIRM_ORDER ? "confirmed" : "cancelled",
     "timeline/lastCustomerReplyAt": Date.now(),
@@ -303,10 +370,11 @@ app.post("/webhook/whatsapp", express.json(), async (req, res) => {
       "timeline/lastMsgSentAt": Date.now()
     }),
     whatsapp: {
-    confirmation_sent: true,
-    confirmation_reply: true
-  }
+      confirmation_sent: true,
+      confirmation_reply: true
+    }
   });
+
 });
 // ---------------- SHOPIFY ORDER CREATE ----------------
 app.post(
@@ -443,6 +511,7 @@ app.post("/webhook/shopify/fulfillment", express.json(), async (req, res) => {
 app.get("/health", (_, r) => r.json({ ok: true }));
 
 app.listen(PORT, () => console.log(`🚀 Server running on ${PORT}`));
+
 
 
 
