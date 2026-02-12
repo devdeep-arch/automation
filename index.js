@@ -29,7 +29,6 @@ const {
   SHOPIFY_WEBHOOK_SECRET,
   VERIFY_TOKEN_META = "shopify123",
   DEFAULT_COUNTRY_CODE = "92",
-  STORE_ID = "store_001", 
 } = process.env;
 
 if (!WHATSAPP_NUMBER_ID || !WHATSAPP_TOKEN || !SHOPIFY_SHOP || !SHOPIFY_ACCESS_TOKEN) {
@@ -144,15 +143,15 @@ async function sendWhatsAppTemplate(phone, templateName, bodyParams = [], button
   }
 }
 // ---------------- SHOPIFY HELPERS ----------------
-async function updateShopifyOrderNote(orderId, note) {
-  const url = `https://${SHOPIFY_SHOP}/admin/api/2024-01/orders/${orderId}.json`;
+async function updateShopifyOrderNote(orderId, shop, access, note) {
+  const url = `https://${shop}/admin/api/2024-01/orders/${orderId}.json`;
   await fetch(url, {
     method: "PUT",
     headers: {
-      "X-Shopify-Access-Token": SHOPIFY_ACCESS_TOKEN,
+      "X-Shopify-Access-Token": access,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ order: { id: orderId, note } }),
+    body: JSON.stringify({ order: { id: orderId, note, tags: note } }),
   });
 }
 
@@ -194,13 +193,19 @@ app.post("/webhook/whatsapp", express.json(), async (req, res) => {
   const storeRef = (path = "") => `stores/${storeId}/${path}`;
   const order = await dbGet(storeRef(`orders/${orderId}`));
   if (!order) return;
+  
+  const store = await dbGet(storeRef(`secrets`));
+  if (!store) return;
+
+  const shop = secrets.SHOPIFY_SHOP;
+  const access = secrets.SHOPIFY_ACCESS_TOKEN;
 
   let templateName = "";
   let bodyParams = [];
 
   // Confirm button → 2 params
   if (action === PAYLOADS.CONFIRM_ORDER) {
-    await updateShopifyOrderNote(orderId, "✅ Order Confirmed" );
+    await updateShopifyOrderNote(orderId, shop, access, "✅ Order Confirmed" );
     templateName = "order_confirmed_reply";
     bodyParams = [
       order.customer.name, // {{1}}
@@ -209,7 +214,7 @@ app.post("/webhook/whatsapp", express.json(), async (req, res) => {
   }
   // Cancel button → 1 param
   else if (action === PAYLOADS.CANCEL_ORDER) {
-    await updateShopifyOrderNote(orderId, "❌ Order Cancelled" );
+    await updateShopifyOrderNote(orderId, shop, access, "❌ Order Cancelled" );
     templateName = "order_cancelled_reply_auto";
     bodyParams = [
       order.order_name,   // {{1}}
@@ -225,7 +230,10 @@ app.post("/webhook/whatsapp", express.json(), async (req, res) => {
     }),
     ...(action === PAYLOADS.CANCEL_ORDER && {
       "timeline/cancelledAt": Date.now()
-    })
+    }),
+    whatsapp: {
+    confirmation_reply: true
+  }
   });
 });
 // ---------------- SHOPIFY ORDER CREATE ----------------
@@ -282,7 +290,8 @@ app.post(
 
   whatsapp: {
     confirmation_sent: true,
-    fulfilled_sent: false
+    fulfilled_sent: false,
+    confirmation_reply: false
   }
 });
     // Example for Shopify order template
@@ -355,6 +364,7 @@ app.post("/webhook/shopify/fulfillment", express.json(), async (req, res) => {
 app.get("/health", (_, r) => r.json({ ok: true }));
 
 app.listen(PORT, () => console.log(`🚀 Server running on ${PORT}`));
+
 
 
 
