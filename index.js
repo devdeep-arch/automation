@@ -113,6 +113,15 @@ async function sendWhatsAppTemplate(phone, templateName, bodyParams = [], button
     });
   }
 
+   if (buttonsPayload.length > 0) {
+      components.push({
+        type: "button",
+        sub_type: "url",
+        index: "0",
+        parameters: bodyParams.map((p) => ({ type: "text", text: p })),
+    });
+  }
+
   try {
     const res = await axios.post(
       `https://graph.facebook.com/v20.0/${WHATSAPP_NUMBER_ID}/messages`,
@@ -434,6 +443,7 @@ app.post("/webhook/shopify/fulfillment", express.json(), async (req, res) => {
 app.get("/health", (_, r) => r.json({ ok: true }));
 
 app.listen(PORT, () => console.log(`🚀 Server running on ${PORT}`));
+
 
 
 
