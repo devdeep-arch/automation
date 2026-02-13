@@ -145,6 +145,15 @@ app.use(express.raw({type:"application/json"}));
 // Health
 app.get("/health", (_, r)=>r.json({ok:true}));
 
+
+function verifyShopify(webhook, req, buf) {
+  const hmac = req.get("X-Shopify-Hmac-Sha256");
+  const hash = crypto.createHmac("sha256", webhook).update(buf).digest("base64");
+  return hmac === hash;
+}
+
+
+
 // WhatsApp Webhook Verify
 app.get("/webhook/whatsapp", (req,res)=>{
   const mode=req.query["hub.mode"], token=req.query["hub.verify_token"], challenge=req.query["hub.challenge"];
@@ -324,5 +333,6 @@ cron.schedule("*/5 * * * *", async ()=>{
 });
 
 app.listen(PORT, ()=>console.log(`🚀 Server running on ${PORT}`));
+
 
 
