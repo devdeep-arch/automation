@@ -142,8 +142,6 @@ async function createPostExOrder(order, store) {
 app.use(express.json());
 app.use(express.raw({type:"application/json"}));
 
-// Health
-app.get("/health", (_, r)=>r.json({ok:true}));
 
 
 function verifyShopify(webhook, req, buf) {
@@ -332,7 +330,10 @@ cron.schedule("*/5 * * * *", async ()=>{
   }
 });
 
+app.get("/health", (_, r)=>r.json({ok:true}));
+
 app.listen(PORT, ()=>console.log(`🚀 Server running on ${PORT}`));
+
 
 
 
