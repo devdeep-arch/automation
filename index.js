@@ -596,8 +596,8 @@ app.post(
   async (req, res) => {
     res.sendStatus(200);
     const shopDomain = req.get("X-Shopify-Shop-Domain");
-    const shop = req.headers["X-Shopify-Shop-Domain"];
     const shopUsername = shopDomain.replace(".myshopify.com", "").toLowerCase();
+    const data = req.body;
 
     const index = await dbGet(`index/${shopUsername}`);
     if (!index?.storeId) return;
@@ -619,7 +619,7 @@ app.post(
     const payloadConfirm = `${PAYLOADS.CONFIRM_ORDER}:${storeId}:${order.id}`;
     const payloadCancel = `${PAYLOADS.CANCEL_ORDER}:${storeId}:${order.id}`;
     console.log("🔥 NEW ORDER WEBHOOK RECEIVED 🔥");
-    console.log("Shop:", shop);
+    console.log("Shop:", shopDomain);
     console.log("Full Order Data:");
     console.log(JSON.stringify(data, null, 2));
 
@@ -729,6 +729,7 @@ app.post("/webhook/shopify/fulfillment", express.json(), async (req, res) => {
 app.get("/health", (_, r) => r.json({ ok: true }));
 
 app.listen(PORT, () => console.log(`🚀 Server running on ${PORT}`));
+
 
 
 
