@@ -693,7 +693,7 @@ app.post("/webhook/shopify/fulfillment", express.json(), async (req, res) => {
     const storeRef = (path = "") => `stores/${storeId}/${path}`;
 
     const fulfillmentData = req.body;
-    const orderId = String(fulfillmentData?.order_id);
+    const orderId = String(fulfillmentData?.id);
     if (!orderId) return;
 
     const fulfillments = fulfillmentData.fulfillments || [fulfillmentData];
@@ -739,6 +739,7 @@ app.post("/webhook/shopify/fulfillment", express.json(), async (req, res) => {
 app.get("/health", (_, r) => r.json({ ok: true }));
 
 app.listen(PORT, () => console.log(`🚀 Server running on ${PORT}`));
+
 
 
 
