@@ -205,9 +205,16 @@ function verifyShopify(webhook, req, buf) {
 }
 
 
-// POSTEX HELPER TO CREATE POSTEX ORDER CALLEDWHILE ORDER BTN CLICK ON CONFIRMATION
+// POSTEX HELPER TO CREATE POSTEX ORDER CALLED WHILE ORDER BTN CLICK ON CONFIRMATION
 async function createPostExOrder(order, store) {
-  if (!store?.POSTEX_API_TOKEN) return null;
+  console.log("📦 [PostEx] Starting order creation...");
+  console.log("🧾 Order ID:", order?.order_id);
+  console.log("🏬 Store ID:", store?.store_id);
+
+  if (!store?.POSTEX_API_TOKEN) {
+    console.error("❌ [PostEx] Missing POSTEX_API_TOKEN");
+    return null;
+  }
 
   const payload = {
     cityName: order.customer.city || "Unknown",
@@ -225,40 +232,64 @@ async function createPostExOrder(order, store) {
     storeAddressCode: store.storeAddressCode || ""
   };
 
+  console.log("📤 [PostEx] Payload:", JSON.stringify(payload, null, 2));
+
   try {
     const res = await axios.post(
       "https://api.postex.pk/services/integration/api/order/v3/create-order",
       payload,
-      { headers:{ token: store.POSTEX_API_TOKEN } }
+      { headers: { token: store.POSTEX_API_TOKEN } }
     );
 
-    if (res.data?.statusCode === "200") return res.data.dist.trackingNumber;
-  } catch(err){
-    console.error("❌ PostEx order create error:", err.response?.data || err.message);
+    console.log("📥 [PostEx] API Response:", res.data);
+
+    if (res.data?.statusCode === "200") {
+      console.log("✅ [PostEx] Order created successfully");
+      return res.data.dist.trackingNumber;
+    } else {
+      console.error("❌ [PostEx] Unexpected statusCode:", res.data?.statusCode);
+    }
+
+  } catch (err) {
+    console.error("❌ [PostEx] Order create error:");
+    console.error("Message:", err.message);
+    console.error("Response:", err.response?.data);
   }
 
   return null;
 }
 
-// POSTEX.....
 
+// POSTEX ORDER CREATE IF ALLOWED
 async function createPostExOrderIfAllowed(order, store) {
-  if (!store?.POSTEX_API_TOKEN) return null;
+  console.log("⚙️ [PostEx] Checking auto booking setting...");
 
-  // Check user/store settings
-  const autoCreate = store.settings?.autoPostExBooking; // true/false
-  if (!autoCreate) return null; // agar manual booking, abhi na kare
+  if (!store?.POSTEX_API_TOKEN) {
+    console.error("❌ [PostEx] Token missing in createPostExOrderIfAllowed");
+    return null;
+  }
+
+  const autoCreate = store.settings?.autoPostExBooking;
+  console.log("🔎 Auto Booking Enabled:", autoCreate);
+
+  if (!autoCreate) {
+    console.log("⏸ Auto booking disabled. Skipping PostEx booking.");
+    return null;
+  }
 
   const trackingNumber = await createPostExOrder(order, store);
 
   if (trackingNumber) {
-    // Agar successful create hua → Shopify fulfill mark kar do
+    console.log("📦 Tracking Number Received:", trackingNumber);
+
     await updateShopifyOrderNote(
       order.order_id,
       store.SHOPIFY_SHOP,
       store.SHOPIFY_ACCESS_TOKEN,
       `✅ Order booked on PostEx, Tracking #: ${trackingNumber}`
     );
+
+    console.log("📝 Shopify note updated");
 
     await dbUpdate(`stores/${store.store_id}/orders/${order.order_id}`, {
       postex: {
@@ -268,73 +299,130 @@ async function createPostExOrderIfAllowed(order, store) {
       },
       status: "fulfilled"
     });
+
+    console.log("💾 Database updated with booking info");
+  } else {
+    console.error("❌ Tracking number not received");
   }
 
   return trackingNumber;
 }
 
-// GET STATUS
 
+// GET STATUS
 async function getPostExOrderStatus(trackingNumber, store) {
+  console.log("🔄 [PostEx] Fetching status for:", trackingNumber);
+
+  if (!store?.POSTEX_API_TOKEN) {
+    console.error("❌ Missing POSTEX_API_TOKEN while fetching status");
+    return [];
+  }
+
   try {
     const res = await axios.get(
       `https://api.postex.pk/services/integration/api/order/v1/get-order-status`,
       {
-        headers: { token: store.POSTEX_API_TOKEN }
+        headers: { token: store.POSTEX_API_TOKEN },
+        params: { trackingNumber } // IMPORTANT if API requires it
       }
     );
 
+    console.log("📥 [PostEx] Status API Response:", res.data);
+
     if (res.data.statusCode === 200 && res.data.dist) {
-      return res.data.dist; // Ye array of statuses: ["Booked","Out For Delivery",...]
+      return res.data.dist;
+    } else {
+      console.error("❌ Invalid status response:", res.data);
     }
+
   } catch (err) {
-    console.error("PostEx status fetch error:", err.message);
+    console.error("❌ PostEx status fetch error:");
+    console.error("Message:", err.message);
+    console.error("Response:", err.response?.data);
   }
 
   return [];
 }
 
 // SCHEDULE CHECK
-
 cron.schedule("*/5 * * * *", async () => {
-  const storesSnap = await db.ref("stores").once("value");
-  const stores = storesSnap.val();
+  console.log("⏰ Cron started at:", new Date().toISOString());
 
-  for (const storeId in stores) {
-    const store = stores[storeId];
-    const orders = store.orders || {};
+  try {
+    const storesSnap = await db.ref("stores").once("value");
+    const stores = storesSnap.val();
 
-    for (const orderId in orders) {
-      const order = orders[orderId];
-      const tracking = order.postex?.trackingNumber;
-      if (!tracking) continue;
+    if (!stores) {
+      console.log("⚠️ No stores found in DB");
+      return;
+    }
 
-      const statusHistory = await getPostExOrderStatus(tracking, store);
-      const lastStatus = statusHistory[statusHistory.length - 1];
+    for (const storeId in stores) {
+      console.log("🏬 Checking Store:", storeId);
 
-      if (lastStatus !== order.postex?.lastStatus) {
-        // Update DB
-        await dbUpdate(`stores/${storeId}/orders/${orderId}/postex`, {
-          lastStatus
-        });
+      const store = stores[storeId];
+      const orders = store.orders || {};
 
-        // Send WhatsApp template based on status
-        if (lastStatus === "Out For Delivery") {
-          await sendWhatsAppTemplate(
-            order.customer.phone,
-            "your_order_is_shipped_2025",
-            [order.order_name]
-          );
-        } else if (lastStatus === "Delivered") {
-          await sendWhatsAppTemplate(
-            order.customer.phone,
-            "order_delivered",
-            [order.customer.name, order.order_name]
-          );
+      for (const orderId in orders) {
+        const order = orders[orderId];
+        const tracking = order.postex?.trackingNumber;
+
+        if (!tracking) {
+          console.log(`⏭ Skipping order ${orderId} (No tracking number)`);
+          continue;
+        }
+
+        console.log(`🔎 Checking order ${orderId} with tracking ${tracking}`);
+
+        const statusHistory = await getPostExOrderStatus(tracking, store);
+
+        if (!statusHistory.length) {
+          console.log("⚠️ No status history received");
+          continue;
+        }
+
+        const lastStatus = statusHistory[statusHistory.length - 1];
+        console.log("📌 Last Status:", lastStatus);
+
+        if (lastStatus !== order.postex?.lastStatus) {
+          console.log("🔄 Status changed. Updating DB...");
+
+          await dbUpdate(`stores/${storeId}/orders/${orderId}/postex`, {
+            lastStatus
+          });
+
+          console.log("💾 DB updated with new status");
+
+          if (lastStatus === "Out For Delivery") {
+            console.log("📲 Sending Out For Delivery WhatsApp");
+
+            await sendWhatsAppTemplate(
+              order.customer.phone,
+              "your_order_is_shipped_2025",
+              [order.order_name]
+            );
+
+          } else if (lastStatus === "Delivered") {
+            console.log("📲 Sending Delivered WhatsApp");
+
+            await sendWhatsAppTemplate(
+              order.customer.phone,
+              "order_delivered",
+              [order.customer.name, order.order_name]
+            );
+          }
+        } else {
+          console.log("✅ No status change");
         }
       }
     }
+
+  } catch (err) {
+    console.error("❌ Cron job error:");
+    console.error("Message:", err.message);
   }
+
+  console.log("⏹ Cron finished");
 });
 
 
@@ -636,6 +724,7 @@ app.post("/webhook/shopify/fulfillment", express.json(), async (req, res) => {
 app.get("/health", (_, r) => r.json({ ok: true }));
 
 app.listen(PORT, () => console.log(`🚀 Server running on ${PORT}`));
+
 
 
 
