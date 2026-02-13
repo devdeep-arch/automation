@@ -213,36 +213,87 @@ app.post("/webhook/whatsapp", async (req,res)=>{
   await sendWhatsAppTemplate(phone, templateName, bodyParams);
 });
 
-// Shopify Order Webhook
-app.post("/webhook/shopify/order",   express.raw({ type: "application/json" }),
+// ---------------- SHOPIFY ORDER CREATE ----------------
+app.post(
+  "/webhook/shopify/order",
+  express.raw({ type: "application/json" }),
   async (req, res) => {
-  res.sendStatus(200);
-  const order = JSON.parse(req.body.toString());
-  const phone = normalizePhone(order.shipping_address?.phone||order.customer?.phone);
-  if(!phone) return;
+    res.sendStatus(200);
+    const shopDomain = req.get("X-Shopify-Shop-Domain");
+    const shopUsername = shopDomain.replace(".myshopify.com", "").toLowerCase();
 
-  // Save DB
-  await dbSet(`stores/${order.shop_name}/orders/${order.id}`, {
-    order_id:String(order.id),
-    order_name:order.name,
-    customer:{ name: order.customer?.first_name||"Customer", phone },
-    product:{ name: order.line_items?.[0]?.name||"Product", qty: order.line_items?.[0]?.quantity||1 },
-    amount:{ total:order.total_price, currency:order.currency },
-    status:"pending",
-    timeline:{ createdAt:Date.now(), lastMsgSentAt:Date.now() },
-    whatsapp:{ confirmation_sent:true, confirmation_reply:false }
-  });
+    const index = await dbGet(`index/${shopUsername}`);
+    if (!index?.storeId) return;
 
-  // Send WhatsApp Confirmation Template
-  const payloadConfirm=`${PAYLOADS.CONFIRM_ORDER}:${order.shop_name}:${order.id}`;
-  const payloadCancel=`${PAYLOADS.CANCEL_ORDER}:${order.shop_name}:${order.id}`;
-  await sendWhatsAppTemplate(
-    phone,
-    "order_confirmation",
-    [order.customer?.first_name||"Customer", order.name, order.line_items?.[0]?.name||"Product", order.line_items?.[0]?.quantity?.toString()||"1", order.shop_name||"My Store", order.total_price?.toString()||"0.00", order.currency||"USD"],
-    [payloadConfirm,payloadCancel]
-  );
+    const storeId = index.storeId;
+    const storeRef = (path = "") => `stores/${storeId}/${path}`;
+
+    const store = await dbGet(storeRef(`secrets`));
+    if (!store) return;
+
+    const webhook = store.SHOPIFY_WEBHOOK_SECRET;
+
+    if (!verifyShopify(webhook, req, req.body)) return;
+
+    const order = JSON.parse(req.body.toString());
+    const phone = normalizePhone(order.shipping_address?.phone || order.customer?.phone);
+    if (!phone) return;
+
+    const payloadConfirm = `${PAYLOADS.CONFIRM_ORDER}:${storeId}:${order.id}`;
+    const payloadCancel = `${PAYLOADS.CANCEL_ORDER}:${storeId}:${order.id}`;
+
+    await dbSet(storeRef(`orders/${order.id}`), {
+  order_id: String(order.id),
+  order_name: order.name,
+
+  customer: {
+    name: order.customer?.first_name || "Customer",
+    phone
+  },
+
+  amount: {
+    total: order.total_price,
+    currency: order.currency
+  },
+
+  product: {
+    name: order.line_items?.[0]?.name || "Product",
+    qty: order.line_items?.[0]?.quantity || 1
+  },
+
+  status: "pending",
+
+  timeline: {
+    createdAt: Date.now(),
+    confirmedAt: "waiting",
+    fulfilledAt: "waiting",
+    deliveredAt: "waiting",
+    lastMsgSentAt: Date.now()
+  },
+
+  whatsapp: {
+    confirmation_sent: true,
+    fulfilled_sent: false,
+    confirmation_reply: false
+  }
 });
+    // Example for Shopify order template
+    await sendWhatsAppTemplate(
+      phone,
+      "order_confirmation",
+      [
+        order.customer?.first_name || "Customer",
+        order.name,
+        order.line_items?.[0]?.name || "Product",
+        order.line_items?.[0]?.quantity?.toString() || "1",
+        order.shop_name || "My Store",
+        order.total_price?.toString() || "0.00",
+        order.currency || "USD",
+      ],
+      [payloadConfirm, payloadCancel]
+    );
+  }
+);
 
 // ---------------- POSTEX TRACKING CRON ----------------
 cron.schedule("*/5 * * * *", async ()=>{
@@ -273,4 +324,5 @@ cron.schedule("*/5 * * * *", async ()=>{
 });
 
 app.listen(PORT, ()=>console.log(`🚀 Server running on ${PORT}`));
+
 
