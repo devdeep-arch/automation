@@ -679,9 +679,11 @@ app.post(
 // ---------------- FULFILLMENT ----------------
 // ---------------- SHOPIFY FULFILLMENT (SHIPPED) ----------------
 app.post("/webhook/shopify/fulfillment", express.json(), async (req, res) => {
+  // ✅ Immediately acknowledge Shopify webhook
   res.sendStatus(200);
 
-  const shopDomain = req.get("X-Shopify-Shop-Domain");
+  try {
+    const shopDomain = req.get("X-Shopify-Shop-Domain");
     const shopUsername = shopDomain.replace(".myshopify.com", "").toLowerCase();
 
     const index = await dbGet(`index/${shopUsername}`);
@@ -690,56 +692,54 @@ app.post("/webhook/shopify/fulfillment", express.json(), async (req, res) => {
     const storeId = index.storeId;
     const storeRef = (path = "") => `stores/${storeId}/${path}`;
 
-  
-  
-  const fulfillment = req.body;
-  const orderId = String(fulfillment?.id);
+    const fulfillmentData = req.body;
+    const orderId = String(fulfillmentData?.order_id);
+    if (!orderId) return;
 
-  const trackingNumber = String(fulfillment.tracking_number?.[0]);
+    const fulfillments = fulfillmentData.fulfillments || [fulfillmentData];
 
-  console.log("Tracking Numbers:", String(fulfillment.tracking_number?.[0]));
-  console.log(fulfillment);
-  
-  if (!orderId) return;
+    // Fetch order from Firebase
+    const order = await dbGet(storeRef(`orders/${orderId}`));
+    if (!order?.customer?.phone) return;
 
-  // ✅ Sirf successful fulfillment pe
-  if (fulfillment.fulfillment_status !== "fulfilled") return;
+    for (const f of fulfillments) {
+      const trackingNumber = f.tracking_numbers?.[0] || f.tracking_number || null;
+      const courier = f.tracking_company || null;
+      const status = f.status || "shipped";
 
-  const order = await dbGet(storeRef(`orders/${orderId}`));
-  if (!order?.customer?.phone) return;
+      if (!trackingNumber) continue; // skip if no tracking number
 
-  // 🟢 Send WhatsApp on SHIPPED
-  await sendWhatsAppTemplate(
-    order.customer.phone,
-    "your_order_is_shipped_2025",
-    [
-      order.order_name   // {{1}}
-    ],
-    []
-  );
+      // Update order in Firebase
+      await dbUpdate(storeRef(`orders/${orderId}`), {
+        "fulfillment/tracking_number": trackingNumber,
+        "fulfillment/courier": courier,
+        "fulfillment/status": status,
 
-  // ✅ CORRECT dbUpdate usage
-  await dbUpdate(
-  storeRef(`orders/${orderId}`),
-  {
-    "fulfillment/tracking_number": trackingNumber,
-    "fulfillment/status": "shipped",
+        status: "fulfilled",
+        "timeline/fulfilledAt": Date.now(),
+        "timeline/lastMsgSentAt": Date.now(),
+        "whatsapp/fulfilled_sent": true
+      });
 
-    status: "fulfilled",
+      console.log(`✅ Order ${orderId} updated with tracking: ${trackingNumber}`);
 
-    "timeline/fulfilledAt": Date.now(),
-    "timeline/lastMsgSentAt": Date.now(),
-
-    "whatsapp/fulfilled_sent": true
+      // Send WhatsApp template
+      await sendWhatsAppTemplate(
+        order.customer.phone,
+        "your_order_is_shipped_2025",
+        [order.order_name], // {{1}}
+        []
+      );
+    }
+  } catch (err) {
+    console.error("❌ Fulfillment webhook error:", err);
   }
-);
-
-  console.log("✅ Fulfill WhatsApp sent for order:", orderId);
 });
 // ---------------- HEALTH ----------------
 app.get("/health", (_, r) => r.json({ ok: true }));
 
 app.listen(PORT, () => console.log(`🚀 Server running on ${PORT}`));
+
 
 
 
