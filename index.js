@@ -695,9 +695,9 @@ app.post("/webhook/shopify/fulfillment", express.json(), async (req, res) => {
   const fulfillment = req.body;
   const orderId = String(fulfillment?.id);
 
-  const trackingNumber = fulfillment.tracking_number?.[0] || null;
+  const trackingNumber = String(fulfillment.tracking_number?.[0]);
 
-  console.log("Tracking Numbers:", fulfillment.tracking_number?.[0]);
+  console.log("Tracking Numbers:", String(fulfillment.tracking_number?.[0]));
   console.log(fulfillment);
   
   if (!orderId) return;
@@ -740,6 +740,7 @@ app.post("/webhook/shopify/fulfillment", express.json(), async (req, res) => {
 app.get("/health", (_, r) => r.json({ ok: true }));
 
 app.listen(PORT, () => console.log(`🚀 Server running on ${PORT}`));
+
 
 
 
