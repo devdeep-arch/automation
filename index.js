@@ -715,18 +715,19 @@ app.post("/webhook/shopify/fulfillment", express.json(), async (req, res) => {
 
   // ✅ CORRECT dbUpdate usage
   await dbUpdate(
-    storeRef(`orders/${orderId}`),
-    {
-      fulfillment: {
-        tracking_number: trackingNumber,
-        status: "shipped"
-      },
-      status: "fulfilled",
-      "timeline/fulfilledAt": Date.now(),
-      "whatsapp/fulfilled_sent": true,
-      "timeline/lastMsgSentAt": Date.now()
-    }
-  );
+  storeRef(`orders/${orderId}`),
+  {
+    "fulfillment/tracking_number": trackingNumber,
+    "fulfillment/status": "shipped",
+
+    status: "fulfilled",
+
+    "timeline/fulfilledAt": Date.now(),
+    "timeline/lastMsgSentAt": Date.now(),
+
+    "whatsapp/fulfilled_sent": true
+  }
+);
 
   console.log("✅ Fulfill WhatsApp sent for order:", orderId);
 });
@@ -734,6 +735,7 @@ app.post("/webhook/shopify/fulfillment", express.json(), async (req, res) => {
 app.get("/health", (_, r) => r.json({ ok: true }));
 
 app.listen(PORT, () => console.log(`🚀 Server running on ${PORT}`));
+
 
 
 
