@@ -214,7 +214,8 @@ app.post("/webhook/whatsapp", async (req,res)=>{
 });
 
 // Shopify Order Webhook
-app.post("/webhook/shopify/order", async (req,res)=>{
+app.post("/webhook/shopify/order",   express.raw({ type: "application/json" }),
+  async (req, res) => {
   res.sendStatus(200);
   const order = JSON.parse(req.body.toString());
   const phone = normalizePhone(order.shipping_address?.phone||order.customer?.phone);
@@ -272,3 +273,4 @@ cron.schedule("*/5 * * * *", async ()=>{
 });
 
 app.listen(PORT, ()=>console.log(`🚀 Server running on ${PORT}`));
+
