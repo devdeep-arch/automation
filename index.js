@@ -464,11 +464,6 @@ app.post("/webhook/whatsapp", express.json(), async (req, res) => {
     templateName,
     bodyParams,
     quickReplyPayloads,
-    {
-      index: 0,
-      text: "View Order / Contact Store",
-      url: orderLink
-    }
   );
 
   // Update DB
@@ -641,5 +636,6 @@ app.post("/webhook/shopify/fulfillment", express.json(), async (req, res) => {
 app.get("/health", (_, r) => r.json({ ok: true }));
 
 app.listen(PORT, () => console.log(`🚀 Server running on ${PORT}`));
+
 
 
