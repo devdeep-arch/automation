@@ -693,8 +693,12 @@ app.post("/webhook/shopify/fulfillment", express.json(), async (req, res) => {
   
   const fulfillment = req.body;
   const orderId = String(fulfillment?.id);
-  const trackingNumber = fulfillment.tracking_number;
 
+  const trackingNumber = fulfillment.tracking_numbers?.[0] || null;
+
+  console.log("Tracking Numbers:", fulfillment.tracking_numbers);
+  
+  
   if (!orderId) return;
 
   // ✅ Sirf successful fulfillment pe
@@ -735,6 +739,7 @@ app.post("/webhook/shopify/fulfillment", express.json(), async (req, res) => {
 app.get("/health", (_, r) => r.json({ ok: true }));
 
 app.listen(PORT, () => console.log(`🚀 Server running on ${PORT}`));
+
 
 
 
