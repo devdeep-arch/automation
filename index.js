@@ -617,10 +617,6 @@ app.post(
 
     const payloadConfirm = `${PAYLOADS.CONFIRM_ORDER}:${storeId}:${order.id}`;
     const payloadCancel = `${PAYLOADS.CANCEL_ORDER}:${storeId}:${order.id}`;
-    console.log("🔥 NEW ORDER WEBHOOK RECEIVED 🔥");
-    console.log("Shop:", shopDomain);
-    console.log("Full Order Data:");
-    console.log(order);
 
     await dbSet(storeRef(`orders/${order.id}`), {
   order_id: String(order.id),
@@ -649,6 +645,11 @@ app.post(
     fulfilledAt: "waiting",
     deliveredAt: "waiting",
     lastMsgSentAt: Date.now()
+  },
+
+   fulfillment: {
+    tracking_number: null,
+    status: "unfulfilled"
   },
 
   whatsapp: {
@@ -692,6 +693,7 @@ app.post("/webhook/shopify/fulfillment", express.json(), async (req, res) => {
   
   const fulfillment = req.body;
   const orderId = String(fulfillment?.id);
+  const trackingNumber = fulfillment.tracking_number;
 
   if (!orderId) return;
 
@@ -715,6 +717,10 @@ app.post("/webhook/shopify/fulfillment", express.json(), async (req, res) => {
   await dbUpdate(
     storeRef(`orders/${orderId}`),
     {
+      fulfillment: {
+        tracking_number: trackingNumber,
+        status: "shipped"
+      },
       status: "fulfilled",
       "timeline/fulfilledAt": Date.now(),
       "whatsapp/fulfilled_sent": true,
@@ -728,6 +734,7 @@ app.post("/webhook/shopify/fulfillment", express.json(), async (req, res) => {
 app.get("/health", (_, r) => r.json({ ok: true }));
 
 app.listen(PORT, () => console.log(`🚀 Server running on ${PORT}`));
+
 
 
 
