@@ -365,7 +365,7 @@ cron.schedule("*/5 * * * *", async () => {
 
       for (const orderId in orders) {
         const order = orders[orderId];
-        const tracking = order.postex?.trackingNumber;
+        const tracking = order.fulfillment?.trackingNumber;
 
         if (!tracking) {
           console.log(`⏭ Skipping order ${orderId} (No tracking number)`);
@@ -384,10 +384,10 @@ cron.schedule("*/5 * * * *", async () => {
         const lastStatus = statusHistory[statusHistory.length - 1];
         console.log("📌 Last Status:", lastStatus);
 
-        if (lastStatus !== order.postex?.lastStatus) {
+        if (lastStatus !== order.fulfillment?.lastStatus) {
           console.log("🔄 Status changed. Updating DB...");
 
-          await dbUpdate(`stores/${storeId}/orders/${orderId}/postex`, {
+          await dbUpdate(`stores/${storeId}/orders/${orderId}/fulfillment`, {
             lastStatus
           });
 
@@ -739,6 +739,7 @@ app.post("/webhook/shopify/fulfillment", express.json(), async (req, res) => {
 app.get("/health", (_, r) => r.json({ ok: true }));
 
 app.listen(PORT, () => console.log(`🚀 Server running on ${PORT}`));
+
 
 
 
